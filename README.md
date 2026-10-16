@@ -40,6 +40,24 @@ El usuario del servidor web y el de los workers necesitan escritura en `storage/
 
 ## Colas y programación
 
+### Host virtual Apache local
+
+Se incluye `deploy/apache/smartgate.conf` para `http://smartgate.localhost`, con
+DocumentRoot limitado a `public/`, sin listado de directorios y logs separados.
+Apache debe tener PHP y `mod_rewrite` habilitados. Para instalar y activar:
+
+```bash
+sudo install -m 644 deploy/apache/smartgate.conf /etc/apache2/sites-available/smartgate.conf
+sudo a2ensite smartgate.conf
+sudo apache2ctl configtest && sudo systemctl reload apache2
+```
+
+Configure `APP_URL=http://smartgate.localhost` y ejecute `php artisan config:clear`.
+Los dominios `.localhost` normalmente resuelven a loopback sin editar hosts; si
+su sistema no lo resuelve, agregue `127.0.0.1 smartgate.localhost` a `/etc/hosts`.
+Este sitio es HTTP de desarrollo local; para producción configure un dominio
+real y TLS. La base de datos debe estar configurada y migrada para iniciar sesión.
+
 Las integraciones y los respaldos no se ejecutan dentro de la petición web. Configure Supervisor/systemd para mantener un worker y cron para el scheduler:
 
 ```bash

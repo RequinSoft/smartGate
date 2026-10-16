@@ -6,11 +6,22 @@ use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
+use App\Models\User;
 
 class RoleSeeder extends Seeder
 {
     public function run(): void
     {
+        // Create an initial admin user
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name' => 'Admin',
+                'password' => bcrypt('password'),
+            ]
+        );
+        $admin->assignRole('Administrador');
+        
         app(PermissionRegistrar::class)->forgetCachedPermissions();
         $permissions = ['people.manage', 'vehicles.manage', 'rfid.manage', 'devices.manage', 'integrations.manage', 'movements.view', 'reports.export', 'audit.view', 'users.manage', 'backups.manage'];
         foreach ($permissions as $permission) {
