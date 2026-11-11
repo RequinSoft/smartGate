@@ -12,9 +12,23 @@ class RoleSeeder extends Seeder
 {
     public function run(): void
     {
+        // Create roles and permissions
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        $permissions = ['people.manage', 'vehicles.manage', 'rfid.manage', 'devices.manage', 'integrations.manage', 'movements.view', 'reports.export', 'audit.view', 'users.manage', 'backups.manage'];
+        foreach ($permissions as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+        $roles = ['Administrador', 'Operador', 'Auditor'];
+        foreach ([
+            'Administrador' => $permissions,
+            'Operador' => ['people.manage', 'vehicles.manage', 'rfid.manage', 'movements.view'],
+            'Auditor' => ['movements.view', 'reports.export', 'audit.view'],
+        ] as $name => $grants) {
+            Role::findOrCreate($name, 'web')->syncPermissions($grants);
+        }
         // Create an initial admin user
         $admin = User::firstOrCreate(
-            ['email' => 'admin@example.com'],
+            ['email' => 'amacias@requinsoft.com'],
             [
                 'name' => 'Admin',
                 'password' => bcrypt('password'),
