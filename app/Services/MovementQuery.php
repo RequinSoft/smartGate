@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Movement;
+use App\Support\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Validator;
@@ -24,8 +25,8 @@ class MovementQuery
     public static function build(array $filters): Builder
     {
         return Movement::with(['person', 'vehicle', 'device'])
-            ->where('occurred_at', '>=', $filters['from'].' 00:00:00')
-            ->where('occurred_at', '<', CarbonImmutable::parse($filters['to'])->addDay())
+            ->where('occurred_at', '>=', CarbonImmutable::parse($filters['from'], Settings::timezone())->startOfDay()->utc())
+            ->where('occurred_at', '<', CarbonImmutable::parse($filters['to'], Settings::timezone())->addDay()->startOfDay()->utc())
             ->when($filters['person'] ?? null, fn ($q, $id) => $q->where('person_id', $id))
             ->when($filters['vehicle'] ?? null, fn ($q, $id) => $q->where('vehicle_id', $id))
             ->when($filters['device'] ?? null, fn ($q, $id) => $q->where('device_id', $id))

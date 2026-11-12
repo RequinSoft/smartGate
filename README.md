@@ -93,6 +93,35 @@ php artisan smartgate:import-people
 
 El contrato esperado es `code: "0"` y `data: { total, list }`, con `personId`, `personCode`, `personName` y opcionalmente `orgIndexCode`. **personId y personCode no se consideran equivalentes**. Si su instalación no devuelve `personId`, no se inventa: ajuste el adaptador con una respuesta documentada y una prueba. Los conflictos detienen la importación; las filas previamente procesadas permanecen guardadas y la operación es repetible. No borra ausentes, no reactiva inactivos, no importa tarjetas y no altera asignaciones locales.
 
+## Recepción de datos de interfazH
+
+SmartGate expone una API para recibir los recursos que envía interfazH. En SmartGate, abra **API interfazH** en el bloque administrativo y genere un token; cópielo en ese momento y configúrelo como token de conexión SmartGate en interfazH. SmartGate almacena únicamente el hash, por lo que no se puede volver a consultar: genere uno nuevo para rotarlo. Puede revocarlo desde la misma pantalla. Use HTTPS fuera del entorno local y mantenga el secreto fuera del repositorio. Si no hay un token activo, la API responde `503`.
+
+| Método y ruta | Función |
+|---|---|
+| `POST /api/connection` | Verifica la conexión y el token |
+| `POST /api/devices` | Recibe dispositivos |
+| `POST /api/doors` | Recibe puertas |
+| `POST /api/groups` | Recibe grupos |
+| `POST /api/personnel` | Recibe personal |
+| `POST /api/events` | Recibe eventos |
+
+Las rutas de recursos aceptan JSON con `source` y un arreglo `data` de hasta 100 registros, cada uno con un `id`:
+
+```json
+{"source":"attendance","data":[{"id":1,"personCode":"00123","complete_name":"Ejemplo"}]}
+```
+
+Para `personnel`, cada registro debe incluir también `personCode` (texto) y `complete_name`. SmartGate usa `personCode` como `employee_number`, conservando ceros iniciales, y `complete_name` como nombre. El `id` numérico se conserva únicamente como identificador externo del registro. Si el número de empleado ya existe, solo se actualiza el nombre; se conservan el departamento, el vínculo con HikCentral, el estado y las asignaciones locales. Una persona nueva queda activa, sin inventar departamento ni `hikcentral_id`. Esta importación ocurre en la misma transacción que la recepción: si un registro no es válido, no se acepta parcialmente el lote.
+
+Para `groups`, cada registro requiere `name` y acepta `parent_id` opcional. Se guardan en la tabla `groups` (identificados por `source` + `external_id`, el `id` de interfazH) conservando la jerarquía. El `group_id` opcional de `personnel` enlaza la persona mediante `people.group_id`; enviar `null` la desvincula. Si una persona o un subgrupo llega antes que su grupo, se crea un grupo provisional `Grupo {id}` que se completa al recibir el grupo.
+
+Las personas cuyo grupo se llama `BAJA` o `BAJAS` (sin distinguir mayúsculas) se inactivan y se revocan sus RFID activos. Si después interfazH las mueve a otro grupo, se reactivan; una persona inactivada manualmente fuera de bajas no se reactiva. Si un grupo se renombra a `BAJAS`, se inactivan todas sus personas.
+
+Para `devices`, cada registro requiere `name` y acepta `ip_address`, `port`, `code` (serie), `type` y `status` (`1` = en línea). Se guardan en `devices` identificados por `source` + `external_id`; el modelo se deduce de la serie (por ejemplo `DS-K1T341CMFW`). Las sincronizaciones posteriores solo actualizan nombre, IP, puerto, serie, tipo y estado: la URL ISAPI, las credenciales, la ubicación, el sentido y la habilitación de lectura/escritura se configuran en SmartGate y nunca se sobrescriben. Un equipo importado queda sin lectura ni escritura hasta capturar su URL ISAPI, usuario y contraseña.
+
+Envíe `Authorization: Bearer <token>` y `Content-Type: application/json`. Una recepción correcta responde `{"success":true,"accepted":1}`; la ruta de conexión responde `{"success":true}`. Los registros se guardan en `integration_records`, identificados por origen, recurso e ID externo: volver a enviar un lote actualiza los registros existentes sin duplicarlos. Además del payload original, el personal se importa al catálogo local; los demás recursos siguen disponibles en la bandeja de integraciones y no configuran permisos ni equipos.
+
 ## Dispositivos Hikvision y límites de compatibilidad
 
 Modelos informados: DS-K1T671TM-3XF, DS-K1T342MFWX-E1, DS-K1T341CMFW y DS-K280120220621V. **La compatibilidad depende del firmware y de las capacidades reales; ninguno fue validado físicamente durante el desarrollo.** El identificador DS-K280120220621V podría incluir un número de serie: confirme modelo/firmware. Los controladores DS-K2801 pueden requerir SDK u otro protocolo y no deben asumirse compatibles con ISAPI.
@@ -143,6 +172,16 @@ La primera lectura recupera aproximadamente las últimas 24 horas; las siguiente
 Los permisos se verifican en el servidor para cada acción, no solamente al ocultar botones. No hay borrado de personas, vehículos, asignaciones ni movimientos desde la interfaz. La bitácora conserva actor, fecha, origen, IP y cambios, excluyendo contraseñas. Las solicitudes web se vinculan con su actor y entidad; los trabajos ejecutados por cola se registran como sistema.
 
 La base de datos **no es un almacén criptográficamente inmutable**: un administrador de base de datos puede alterarla. Para requisitos regulatorios configure exportación externa WORM/solo anexado, políticas de conservación, monitoreo, privilegios separados y pruebas de restauración. Limite acceso a datos personales, documente la finalidad y defina retención según su normativa. No se incluye eliminación automática de evidencia.
+
+## Configuración
+
+El bloque **Configuración** del menú (permiso `settings.manage`, otorgado al rol Administrador) agrupa:
+
+- **Respaldos**.
+- **Correo SMTP**: servidor, puerto, seguridad (`smtp` = STARTTLS/sin cifrado, `smtps` = SSL/TLS implícito), usuario, contraseña (cifrada con `APP_KEY`, nunca se muestra ni se audita) y remitente. Incluye envío de un correo de prueba. Mientras no se configure se usa `MAIL_*` del `.env`.
+- **Zona horaria**: los registros se guardan siempre en UTC; la zona configurada se usa para mostrar fechas, filtrar movimientos por día, exportar el CSV y programar tareas (respaldos a las 02:00 de esa zona).
+
+Los ajustes se guardan en la tabla `settings`. Al guardarlos se envía la señal de `queue:restart` para que los workers carguen la nueva configuración.
 
 ## Respaldos y restauración
 

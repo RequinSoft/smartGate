@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Workspace;
+use App\Models\Person;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -95,5 +96,21 @@ class AccessTest extends TestCase
         $this->assertStringNotContainsString('new-secure-password', $json);
         $this->assertStringNotContainsString('device-user', $json);
         $this->assertDatabaseHas('devices', ['read_enabled' => false, 'write_enabled' => false]);
+    }
+
+    public function test_person_modal_create_and_edit_flow(): void
+    {
+        $admin = User::factory()->create()->assignRole('Administrador');
+        $component = Livewire::actingAs($admin)->test(Workspace::class, ['section' => 'people'])
+            ->assertDontSee('person-modal-title')
+            ->call('createPerson')->assertSet('showPersonModal', true)->assertSee('Añadir persona')
+            ->call('savePerson')->assertHasErrors(['name', 'number'])->assertSet('showPersonModal', true)
+            ->set('name', 'Ana Ruiz')->set('number', 'E-1')->call('savePerson')
+            ->assertHasNoErrors()->assertSet('showPersonModal', false);
+        $person = Person::where('employee_number', 'E-1')->firstOrFail();
+        $component->call('editPerson', $person->id)->assertSet('showPersonModal', true)->assertSet('name', 'Ana Ruiz')
+            ->set('name', 'Ana Ruiz Gómez')->call('savePerson')->assertSet('showPersonModal', false);
+        $this->assertSame('Ana Ruiz Gómez', $person->fresh()->name);
+        $component->call('createPerson')->call('closePersonModal')->assertSet('showPersonModal', false)->assertSet('name', '');
     }
 }

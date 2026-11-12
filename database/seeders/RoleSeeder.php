@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\PermissionRegistrar;
-use App\Models\User;
 
 class RoleSeeder extends Seeder
 {
@@ -14,7 +14,7 @@ class RoleSeeder extends Seeder
     {
         // Create roles and permissions
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-        $permissions = ['people.manage', 'vehicles.manage', 'rfid.manage', 'devices.manage', 'integrations.manage', 'movements.view', 'reports.export', 'audit.view', 'users.manage', 'backups.manage'];
+        $permissions = ['people.manage', 'vehicles.manage', 'rfid.manage', 'devices.manage', 'integrations.manage', 'movements.view', 'reports.export', 'audit.view', 'users.manage', 'backups.manage', 'settings.manage'];
         foreach ($permissions as $permission) {
             Permission::findOrCreate($permission, 'web');
         }
@@ -35,9 +35,9 @@ class RoleSeeder extends Seeder
             ]
         );
         $admin->assignRole('Administrador');
-        
+
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-        $permissions = ['people.manage', 'vehicles.manage', 'rfid.manage', 'devices.manage', 'integrations.manage', 'movements.view', 'reports.export', 'audit.view', 'users.manage', 'backups.manage'];
+        $permissions = ['people.manage', 'vehicles.manage', 'rfid.manage', 'devices.manage', 'integrations.manage', 'movements.view', 'reports.export', 'audit.view', 'users.manage', 'backups.manage', 'settings.manage'];
         foreach ($permissions as $permission) {
             Permission::findOrCreate($permission, 'web');
         }

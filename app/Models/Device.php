@@ -14,6 +14,7 @@ class Device extends AuditedModel
             'read_enabled' => 'boolean',
             'write_enabled' => 'boolean',
             'last_polled_at' => 'immutable_datetime',
+            'online' => 'boolean',
         ];
     }
 }

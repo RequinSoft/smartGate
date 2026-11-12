@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\MovementQuery;
 use App\Support\Audit;
+use App\Support\Settings;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -17,10 +18,10 @@ class ReportController extends Controller
 
         return response()->streamDownload(function () use ($filters) {
             $stream = fopen('php://output', 'w');
-            fputcsv($stream, ['Fecha UTC', 'Persona', 'Empleado', 'Vehículo', 'RFID', 'Dispositivo', 'Ubicación', 'Sentido configurado', 'Tipo de evento'], escape: '');
+            fputcsv($stream, ['Fecha ('.Settings::timezone().')', 'Persona', 'Empleado', 'Vehículo', 'RFID', 'Dispositivo', 'Ubicación', 'Sentido configurado', 'Tipo de evento'], escape: '');
             foreach (MovementQuery::build($filters)->lazy(500) as $movement) {
                 $values = [
-                    $movement->occurred_at->format('Y-m-d H:i:s'),
+                    Settings::local($movement->occurred_at),
                     $movement->person?->name ?? 'Sin identificar', $movement->employee_number,
                     $movement->vehicle?->plate, $movement->card_number, $movement->device->name,
                     $movement->location, $movement->direction, $movement->event_type,
