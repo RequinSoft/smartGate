@@ -6,8 +6,13 @@ Aplicación Laravel 13, Livewire 4 y MySQL/MariaDB para administrar RFID y consu
 
 - Autenticación sin registro público, limitación de intentos y usuarios con roles Administrador, Operador y Auditor.
 - Personal local e importación paginada desde HikCentral Professional 3.0.0.
-- Vehículos, tarjetas decimales conservadas como texto y asignaciones históricas persona/vehículo.
+- Administrativos > Grupos permite consultar y buscar los grupos recibidos de interfazH, con su grupo padre, origen, ID externo y número de personas asignadas directamente.
+- Vehículos con placa, marca, modelo, versión, color y fotografía opcional (con imagen predeterminada), tarjetas decimales conservadas como texto y asignaciones históricas persona/vehículo.
+- Los enlaces Personal y Vehículos del bloque Operativos muestran solo registros activos. El bloque Inactivos contiene Personal inactivo y Vehículos inactivos, con los mismos permisos y edición para reactivarlos. El estado de un vehículo se cambia desde su formulario; los vehículos existentes se conservan activos al actualizar.
+- El dashboard cuenta únicamente personal y vehículos activos; conserva los movimientos históricos de todos los registros.
+- Cada vehículo se clasifica como Personal o De la empresa desde su formulario; el tipo se muestra en ambos listados. Los vehículos existentes quedan Sin clasificar hasta que se editen.
 - Alta y revocación RFID en cola, confirmación individual por equipo y reintentos visibles.
+- En Operativos, RFID permite registrar tarjetas sin asignarlas mediante un botón y modal. Asignaciones RFID mantiene el historial, revocaciones y confirmaciones; su botón Añadir asignación abre un modal para seleccionar un RFID previamente registrado, una persona y opcionalmente un vehículo y dispositivos.
 - Consulta incremental de eventos ISAPI, deduplicación y cursor actualizado solo al completar todas las páginas.
 - Seguimiento por persona, vehículo, dispositivo, RFID y fechas; exportación CSV auditada.
 - Auditoría de cambios, autenticación, importación, envío, revocación, lectura, exportación y respaldos.
@@ -36,7 +41,7 @@ El comando solicita una contraseña de al menos 12 caracteres; no existen contra
 
 Para desarrollo: `php artisan serve`. En producción sirva únicamente `public/` mediante HTTPS, use `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_SECURE_COOKIE=true` y configure el correo. No publique el directorio raíz ni el almacenamiento de respaldos.
 
-El usuario del servidor web y el de los workers necesitan escritura en `storage/` y `bootstrap/cache/`. Use un grupo compartido y permisos adecuados, no permisos globales `777`. Si ejecuta Artisan con otro usuario, asegure que los logs creados por ambos sigan siendo escribibles.
+El usuario del servidor web y el de los workers necesitan escritura en `storage/` y `bootstrap/cache/`. Las fotografías de vehículos se guardan en el almacenamiento privado y solo las sirve la aplicación a usuarios con permiso para gestionar vehículos. Use un grupo compartido y permisos adecuados, no permisos globales `777`. Si ejecuta Artisan con otro usuario, asegure que los logs creados por ambos sigan siendo escribibles.
 
 ## Colas y programación
 

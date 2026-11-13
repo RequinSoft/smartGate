@@ -11,16 +11,16 @@
     @endif
     <div wire:loading class="alert">Procesando solicitud…</div>
 
-    @if($section === 'people')
+    @if(in_array($section, ['people', 'inactive-people']))
         <section class="card">
             <div class="toolbar">
                 <x-input label="Buscar por nombre o número" wire:model.live.debounce.400ms="search" />
-                <button type="button" wire:click="createPerson">+ Añadir persona</button>
+                @if($section === 'people')<button type="button" wire:click="createPerson">+ Añadir persona</button>@endif
             </div>
             <div class="table-wrap"><table><thead><tr><th>Empleado</th><th>Nombre</th><th>Grupo</th><th>Departamento</th><th>HikCentral ID</th><th>Estado</th><th></th></tr></thead><tbody>
                 @forelse($rows as $row)
                     <tr wire:key="person-{{ $row->id }}"><td>{{ $row->employee_number }}</td><td>{{ $row->name }}</td><td>{{ $row->group?->name ?? '—' }}</td><td>{{ $row->department }}</td><td>{{ $row->hikcentral_id ?? 'Local' }}</td><td><span class="badge">{{ $row->active ? 'Activo' : 'Inactivo' }}</span></td><td><button class="secondary" wire:click="editPerson({{ $row->id }})">Editar</button></td></tr>
-                @empty<tr><td colspan="7" class="empty">No hay personal registrado.</td></tr>@endforelse
+                @empty<tr><td colspan="7" class="empty">{{ $section === 'people' ? 'No hay personal activo.' : 'No hay personal inactivo.' }}</td></tr>@endforelse
             </tbody></table></div>{{ $rows->links() }}
         </section>
         @if($showPersonModal)
@@ -43,31 +43,93 @@
                 </div>
             </div>
         @endif
-    @elseif($section === 'vehicles')
+    @elseif(in_array($section, ['vehicles', 'inactive-vehicles']))
         <section class="card">
-            <h2>{{ $editingId ? 'Editar vehículo' : 'Registrar vehículo' }}</h2>
-            <form wire:submit="saveVehicle">
-                <div class="form-grid">
-                    <x-input label="Placa / matrícula" wire:model="plate" required maxlength="32" />
-                    <x-input label="Descripción" wire:model="description" required maxlength="255" />
-                </div>
-                <div class="actions"><button>Guardar</button><button type="button" class="secondary" wire:click="resetForm">Limpiar</button></div>
-            </form>
-        </section>
-        <section class="card">
-            <x-input label="Buscar placa" wire:model.live.debounce.400ms="search" />
-            <div class="table-wrap"><table><thead><tr><th>Placa</th><th>Descripción</th><th></th></tr></thead><tbody>
-                @forelse($rows as $row)<tr wire:key="vehicle-{{ $row->id }}"><td>{{ $row->plate }}</td><td>{{ $row->description }}</td><td><button class="secondary" wire:click="editVehicle({{ $row->id }})">Editar</button></td></tr>
-                @empty<tr><td colspan="3" class="empty">No hay vehículos registrados.</td></tr>@endforelse
+            <div class="toolbar">
+                <x-input label="Buscar placa" wire:model.live.debounce.400ms="search" />
+                @if($section === 'vehicles')<button type="button" wire:click="createVehicle">+ Añadir vehículo</button>@endif
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>Foto</th><th>Placa</th><th>Tipo</th><th>Marca</th><th>Modelo</th><th>Versión</th><th>Color</th><th></th></tr></thead><tbody>
+                @forelse($rows as $row)<tr wire:key="vehicle-{{ $row->id }}"><td><img class="vehicle-photo" src="{{ $row->photo_path ? route('vehicles.photo', $row) : asset('images/default-vehicle.svg') }}" alt="Fotografía de {{ $row->plate }}"></td><td>{{ $row->plate }}</td><td>{{ \App\Models\Vehicle::OWNERSHIP_TYPES[$row->ownership] ?? 'Sin clasificar' }}</td><td>{{ $row->brand ?? '—' }}</td><td>{{ $row->model ?? '—' }}</td><td>{{ $row->version ?? '—' }}</td><td>{{ $row->color ?? '—' }}</td><td><button class="secondary" wire:click="editVehicle({{ $row->id }})">Editar</button></td></tr>
+                @empty<tr><td colspan="8" class="empty">{{ $section === 'vehicles' ? 'No hay vehículos activos.' : 'No hay vehículos inactivos.' }}</td></tr>@endforelse
             </tbody></table></div>{{ $rows->links() }}
         </section>
-    @elseif($section === 'rfid')
+        @if($showVehicleModal)
+            <div class="modal-backdrop" wire:click.self="closeVehicleModal" wire:keydown.escape.window="closeVehicleModal">
+                <div class="modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-modal-title">
+                    <div class="modal-header">
+                        <h2 id="vehicle-modal-title">{{ $editingId ? 'Editar vehículo' : 'Añadir vehículo' }}</h2>
+                        <button type="button" class="modal-close" wire:click="closeVehicleModal" aria-label="Cerrar">&times;</button>
+                    </div>
+                    <form wire:submit="saveVehicle">
+                        @if($errors->any())<div role="alert" class="alert error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+                        <div class="form-grid">
+                            <x-input label="Placa / matrícula" wire:model="plate" required maxlength="32" />
+                            <x-select label="Tipo de vehículo" wire:model="vehicleOwnership" required>
+                                <option value="">Seleccionar…</option>
+                                @foreach(\App\Models\Vehicle::OWNERSHIP_TYPES as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach
+                            </x-select>
+                            <x-input label="Marca" wire:model="vehicleBrand" required maxlength="100" />
+                            <x-input label="Modelo" wire:model="vehicleModel" required maxlength="100" />
+                            <x-input label="Versión" wire:model="vehicleVersion" required maxlength="100" />
+                            <x-input label="Color" wire:model="vehicleColor" required maxlength="64" />
+                            <x-input label="Fotografía (opcional)" type="file" wire:model="vehiclePhoto" accept="image/jpeg,image/png,image/webp" autofocus />
+                            <label class="check"><input type="checkbox" wire:model="active"> Vehículo activo</label>
+                        </div>
+                        <div wire:loading wire:target="vehiclePhoto" class="muted small">Cargando fotografía…</div>
+                        @if($vehiclePhoto && $vehiclePhoto->isPreviewable())
+                            <img class="vehicle-photo-preview" src="{{ $vehiclePhoto->temporaryUrl() }}" alt="Vista previa de la fotografía del vehículo">
+                        @else
+                            <img class="vehicle-photo-preview" src="{{ $editingId && $currentVehiclePhotoPath ? route('vehicles.photo', $editingId) : asset('images/default-vehicle.svg') }}" alt="Vista previa de la fotografía del vehículo">
+                        @endif
+                        <div class="actions"><button wire:loading.attr="disabled">Guardar</button><button type="button" class="secondary" wire:click="closeVehicleModal">Cancelar</button></div>
+                    </form>
+                </div>
+            </div>
+        @endif
+    @elseif($section === 'rfid-tags')
         <section class="card">
-            <h2>Asignar RFID</h2>
+            <div class="toolbar">
+                <x-input label="Buscar RFID" wire:model.live.debounce.400ms="search" />
+                <button type="button" wire:click="createRfid">+ Añadir RFID</button>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>Número RFID</th><th>Fecha de registro</th></tr></thead><tbody>
+                @forelse($rows as $row)<tr wire:key="rfid-tag-{{ $row->id }}"><td>{{ $row->number }}</td><td>{{ \App\Support\Settings::local($row->created_at) }}</td></tr>
+                @empty<tr><td colspan="2" class="empty">No hay RFID registrados.</td></tr>@endforelse
+            </tbody></table></div>{{ $rows->links() }}
+        </section>
+        @if($showRfidModal)
+            <div class="modal-backdrop" wire:click.self="closeRfidModal" wire:keydown.escape.window="closeRfidModal">
+                <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rfid-modal-title">
+                    <div class="modal-header">
+                        <h2 id="rfid-modal-title">Añadir RFID</h2>
+                        <button type="button" class="modal-close" wire:click="closeRfidModal" aria-label="Cerrar">&times;</button>
+                    </div>
+                    <form wire:submit="saveRfid">
+                        @if($errors->any())<div role="alert" class="alert error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+                        <p class="muted">El número se conserva como texto, incluidos los ceros iniciales. Registrar un RFID no lo asigna ni lo envía a los dispositivos.</p>
+                        <x-input label="Número de tarjeta RFID (decimal)" wire:model="number" required pattern="[0-9]{1,32}" maxlength="32" autofocus />
+                        <div class="actions"><button wire:loading.attr="disabled">Guardar</button><button type="button" class="secondary" wire:click="closeRfidModal">Cancelar</button></div>
+                    </form>
+                </div>
+            </div>
+        @endif
+    @elseif($section === 'rfid')
+        @if($showAssignmentModal)
+            <div class="modal-backdrop" wire:click.self="closeAssignmentModal" wire:keydown.escape.window="closeAssignmentModal">
+                <div class="modal" role="dialog" aria-modal="true" aria-labelledby="assignment-modal-title">
+                    <div class="modal-header">
+                        <h2 id="assignment-modal-title">Añadir asignación RFID</h2>
+                        <button type="button" class="modal-close" wire:click="closeAssignmentModal" aria-label="Cerrar">&times;</button>
+                    </div>
             <p class="muted">El número se conserva como texto, incluidos los ceros iniciales. Una tarjeta solo puede tener una asignación activa. Para enviarla, el número de empleado debe existir en el equipo: SmartGate no altera planes ni concede permisos de apertura.</p>
             <form wire:submit="assign">
+                @if($errors->any())<div role="alert" class="alert error"><ul>@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
                 <div class="form-grid">
-                    <x-input label="Número de tarjeta RFID (decimal)" wire:model="number" required pattern="[0-9]{1,32}" maxlength="32" />
+                    <x-select label="RFID registrado" wire:model="number" required>
+                        <option value="">Seleccionar…</option>
+                        @foreach($rfidTags as $item)<option value="{{ $item->number }}">{{ $item->number }}</option>@endforeach
+                    </x-select>
                     <x-select label="Persona responsable" wire:model="personId" required>
                         <option value="">Seleccionar…</option>
                         @foreach($people->where('active', true) as $item)<option value="{{ $item->id }}">{{ $item->employee_number }} · {{ $item->name }}</option>@endforeach
@@ -79,11 +141,16 @@
                         <label class="check"><input type="checkbox" wire:model="deviceIds" value="{{ $item->id }}">{{ $item->name }} · {{ $item->location }}</label>
                     @empty<p class="muted">Sin dispositivos habilitados: la asignación será solamente local.</p>@endforelse
                 </fieldset>
-                <button wire:loading.attr="disabled">Asignar RFID</button>
+                <div class="actions"><button wire:loading.attr="disabled">Asignar RFID</button><button type="button" class="secondary" wire:click="closeAssignmentModal">Cancelar</button></div>
             </form>
-        </section>
+                </div>
+            </div>
+        @endif
         <section class="card">
-            <h2>Historial de asignaciones</h2>
+            <div class="toolbar">
+                <h2>Historial de asignaciones</h2>
+                <button type="button" wire:click="createAssignment">+ Añadir asignación</button>
+            </div>
             <div class="table-wrap"><table><thead><tr><th>RFID</th><th>Persona</th><th>Vehículo</th><th>Desde</th><th>Revocada</th><th></th></tr></thead><tbody>
                 @forelse($rows as $row)<tr wire:key="assignment-{{ $row->id }}"><td>{{ $row->tag->number }}</td><td>{{ $row->person->name }}</td><td>{{ $row->vehicle?->plate ?? '—' }}</td><td>{{ \App\Support\Settings::local($row->assigned_at) }}</td><td>{{ $row->revoked_at ? \App\Support\Settings::local($row->revoked_at) : 'Activa' }}</td><td>@unless($row->revoked_at)<button class="danger" wire:click="revoke({{ $row->id }})" wire:confirm="¿Revocar este RFID y solicitar la baja en todos sus equipos?">Revocar</button>@endunless</td></tr>
                 @empty<tr><td colspan="6" class="empty">No hay asignaciones.</td></tr>@endforelse
@@ -123,6 +190,16 @@
                 @empty<tr><td colspan="8" class="empty">Registre sus puntos de acceso.</td></tr>@endforelse
             </tbody></table></div>{{ $rows->links() }}
         </section>
+    @elseif($section === 'groups')
+        <section class="card">
+            <x-input label="Buscar grupo" wire:model.live.debounce.400ms="search" />
+            <p class="muted">Grupos recibidos de interfazH. El ID externo corresponde al identificador enviado por el sistema de origen.</p>
+            <div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Grupo padre</th><th>Origen</th><th>ID externo</th><th>Personas</th></tr></thead><tbody>
+                @forelse($rows as $row)
+                    <tr wire:key="group-{{ $row->id }}"><td>{{ $row->name }}</td><td>{{ $row->parent?->name ?? '—' }}</td><td>{{ $row->source }}</td><td>{{ $row->external_id }}</td><td>{{ $row->people_count }}</td></tr>
+                @empty<tr><td colspan="5" class="empty">No hay grupos para mostrar.</td></tr>@endforelse
+            </tbody></table></div>{{ $rows->links() }}
+        </section>
     @elseif($section === 'integrations')
         <section class="card">
             <h2>Importación inicial · HikCentral Professional 3.0.0</h2>
@@ -157,7 +234,7 @@
         </section>
     @elseif(in_array($section, ['movements', 'dashboard']))
         @if($section === 'dashboard')
-            <div class="stats"><section class="card"><span>Eventos en el período</span><strong>{{ $rows->total() }}</strong></section><section class="card"><span>Personal registrado</span><strong>{{ $people->count() }}</strong></section><section class="card"><span>Vehículos registrados</span><strong>{{ $vehicles->count() }}</strong></section></div>
+            <div class="stats"><section class="card"><span>Eventos en el período</span><strong>{{ $rows->total() }}</strong></section><section class="card"><span>Personal activo</span><strong>{{ $people->where('active', true)->count() }}</strong></section><section class="card"><span>Vehículos activos</span><strong>{{ $vehicles->where('active', true)->count() }}</strong></section></div>
         @endif
         <section class="card">
             <h2>Seguimiento por persona, RFID y vehículo</h2>

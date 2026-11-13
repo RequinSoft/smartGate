@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" role="img" aria-label="Vehículo sin fotografía">
+  <rect width="160" height="100" rx="10" fill="#17283c"/>
+  <path d="m37 58 8-20c2-5 6-8 12-8h45c6 0 10 3 12 8l8 20 7 4v17h-9a11 11 0 0 1-22 0H63a11 11 0 0 1-22 0h-9V62l5-4Z" fill="#29435d" stroke="#6b879f" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m51 54 6-15c1-3 3-4 6-4h39c3 0 5 1 6 4l6 15H51Z" fill="#102033" stroke="#6b879f" stroke-width="2" stroke-linejoin="round"/>
+  <circle cx="52" cy="78" r="7" fill="#101a2b" stroke="#8ca1bd" stroke-width="3"/>
+  <circle cx="107" cy="78" r="7" fill="#101a2b" stroke="#8ca1bd" stroke-width="3"/>
+</svg>

@@ -7,9 +7,11 @@ use App\Jobs\PollDevice;
 use App\Jobs\ProvisionRfid;
 use App\Jobs\RunBackup;
 use App\Models\Device;
+use App\Models\Group;
 use App\Models\Person;
 use App\Models\Provisioning;
 use App\Models\RfidAssignment;
+use App\Models\RfidTag;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\MovementQuery;
@@ -26,6 +28,8 @@ use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\Models\Role;
@@ -34,14 +38,19 @@ use Throwable;
 #[Layout('components.layouts.app')]
 class Workspace extends Component
 {
+    use WithFileUploads;
     use WithPagination;
 
     public const SECTIONS = [
         'dashboard' => ['Panel', 'movements.view'],
         'people' => ['Personal', 'people.manage'],
         'vehicles' => ['Vehículos', 'vehicles.manage'],
+        'inactive-people' => ['Personal inactivo', 'people.manage'],
+        'inactive-vehicles' => ['Vehículos inactivos', 'vehicles.manage'],
+        'rfid-tags' => ['RFID', 'rfid.manage'],
         'rfid' => ['Asignaciones RFID', 'rfid.manage'],
         'devices' => ['Dispositivos', 'devices.manage'],
+        'groups' => ['Grupos', 'integrations.manage'],
         'integrations' => ['HikCentral', 'integrations.manage'],
         'interfaceh' => ['API interfazH', 'integrations.manage'],
         'movements' => ['Movimientos y reportes', 'movements.view'],
@@ -53,8 +62,9 @@ class Workspace extends Component
     ];
 
     public const MENU_GROUPS = [
-        'Operativos' => ['dashboard', 'people', 'vehicles', 'rfid', 'movements'],
-        'Administrativos' => ['devices', 'integrations', 'interfaceh', 'audit', 'users'],
+        'Operativos' => ['dashboard', 'people', 'vehicles', 'rfid-tags', 'rfid', 'movements'],
+        'Inactivos' => ['inactive-people', 'inactive-vehicles'],
+        'Administrativos' => ['devices', 'groups', 'integrations', 'interfaceh', 'audit', 'users'],
         'Configuración' => ['backups', 'smtp', 'timezone'],
     ];
 
@@ -62,8 +72,12 @@ class Workspace extends Component
         'dashboard' => 'M3 10.5 12 3l9 7.5M5 9v12h14V9M9 21v-7h6v7',
         'people' => 'M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-7.5a4 4 0 0 1 0 7.75M20 21v-2a4 4 0 0 0-3-3.87',
         'vehicles' => 'M3 13h18l-2-6H5l-2 6Zm0 0v5h18v-5M6 18v2m12-2v2M6 13v-2m12 2v-2',
+        'inactive-people' => 'M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8-6 4 4m0-4-4 4',
+        'inactive-vehicles' => 'M3 13h18l-2-6H5l-2 6Zm0 0v5h18v-5M6 18v2m12-2v2M9 10h6',
         'rfid' => 'M12 3 5 6v5c0 4.5 2.9 8.5 7 10 4.1-1.5 7-5.5 7-10V6l-7-3Zm-3 9h6m-3-3v6',
+        'rfid-tags' => 'M3 5h18v14H3zM6 9h5m-5 4h3m6-4a4 4 0 0 1 0 6m3-8a7 7 0 0 1 0 10',
         'devices' => 'M4 4h16v13H4zM8 21h8m-4-4v4m-5-13h8m-8 4h5',
+        'groups' => 'M9 3h6v5H9zM3 16h6v5H3zm12 0h6v5h-6zM12 8v4m-6 4v-4h12v4',
         'movements' => 'M4 19V5m0 14h16M7 15l4-4 3 2 5-6m-3 0h3v3',
         'integrations' => 'M8 7H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3m8-12h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-3M8 12h8m-5-3 3 3-3 3',
         'interfaceh' => 'M5 4h14v16H5zM8 8h8m-8 4h8m-8 4h5',
@@ -95,9 +109,29 @@ class Workspace extends Component
 
     public bool $showPersonModal = false;
 
+    public bool $showVehicleModal = false;
+
+    public bool $showRfidModal = false;
+
+    public bool $showAssignmentModal = false;
+
     public string $plate = '';
 
+    public string $vehicleBrand = '';
+
+    public string $vehicleModel = '';
+
+    public string $vehicleVersion = '';
+
+    public string $vehicleColor = '';
+
+    public string $vehicleOwnership = '';
+
     public string $description = '';
+
+    public ?TemporaryUploadedFile $vehiclePhoto = null;
+
+    public string $currentVehiclePhotoPath = '';
 
     public string $personId = '';
 
@@ -271,7 +305,7 @@ class Workspace extends Component
 
     public function resetForm(): void
     {
-        $this->reset(['editingId', 'name', 'number', 'department', 'active', 'plate', 'description', 'personId', 'vehicleId', 'deviceIds', 'model', 'baseUrl', 'username', 'password', 'location', 'direction', 'readEnabled', 'writeEnabled', 'email', 'role']);
+        $this->reset(['editingId', 'name', 'number', 'department', 'active', 'plate', 'vehicleBrand', 'vehicleModel', 'vehicleVersion', 'vehicleColor', 'vehicleOwnership', 'description', 'vehiclePhoto', 'currentVehiclePhotoPath', 'personId', 'vehicleId', 'deviceIds', 'model', 'baseUrl', 'username', 'password', 'location', 'direction', 'readEnabled', 'writeEnabled', 'email', 'role']);
         $this->resetValidation();
     }
 
@@ -308,6 +342,7 @@ class Workspace extends Component
             'name' => 'required|string|max:255',
             'number' => ['required', 'regex:/^[a-zA-Z0-9_-]{1,32}$/', Rule::unique('people', 'employee_number')->ignore($this->editingId)],
             'department' => 'nullable|string|max:255',
+            'active' => 'required|boolean',
         ]);
         DB::transaction(function () {
             $person = $this->editingId ? Person::lockForUpdate()->findOrFail($this->editingId) : new Person;
@@ -338,34 +373,127 @@ class Workspace extends Component
         $vehicle = Vehicle::findOrFail($id);
         $this->editingId = $id;
         $this->plate = $vehicle->plate;
-        $this->description = $vehicle->description;
+        $this->vehicleBrand = $vehicle->brand ?? '';
+        $this->vehicleModel = $vehicle->model ?? '';
+        $this->vehicleVersion = $vehicle->version ?? '';
+        $this->vehicleColor = $vehicle->color ?? '';
+        $this->vehicleOwnership = $vehicle->ownership ?? '';
+        $this->active = $vehicle->active;
+        $this->currentVehiclePhotoPath = $vehicle->photo_path ?? '';
+        $this->showVehicleModal = true;
+    }
+
+    public function createVehicle(): void
+    {
+        Gate::authorize('vehicles.manage');
+        $this->resetForm();
+        $this->showVehicleModal = true;
+    }
+
+    public function closeVehicleModal(): void
+    {
+        $this->showVehicleModal = false;
+        $this->resetForm();
     }
 
     public function saveVehicle(): void
     {
         Gate::authorize('vehicles.manage');
         $this->plate = mb_strtoupper(trim($this->plate));
-        $this->validate(['plate' => ['required', 'string', 'max:32', Rule::unique('vehicles')->ignore($this->editingId)], 'description' => 'required|string|max:255']);
-        DB::transaction(function () {
-            $vehicle = $this->editingId ? Vehicle::findOrFail($this->editingId) : new Vehicle;
-            $vehicle->fill(['plate' => $this->plate, 'description' => $this->description])->save();
-        });
+        $this->validate([
+            'plate' => ['required', 'string', 'max:32', Rule::unique('vehicles')->ignore($this->editingId)],
+            'vehicleBrand' => 'required|string|max:100',
+            'vehicleModel' => 'required|string|max:100',
+            'vehicleVersion' => 'required|string|max:100',
+            'vehicleColor' => 'required|string|max:64',
+            'vehicleOwnership' => ['required', Rule::in(array_keys(Vehicle::OWNERSHIP_TYPES))],
+            'active' => 'required|boolean',
+            'vehiclePhoto' => 'nullable|image|mimes:jpeg,png,webp|max:5120',
+        ]);
+        $vehicle = $this->editingId ? Vehicle::findOrFail($this->editingId) : new Vehicle;
+        $previousPhotoPath = $vehicle->photo_path;
+        $newPhotoPath = $this->vehiclePhoto?->store('vehicles', 'local');
+        if ($this->vehiclePhoto && $newPhotoPath === false) {
+            throw new \RuntimeException('No se pudo guardar la fotografía del vehículo.');
+        }
+        try {
+            DB::transaction(function () use ($vehicle, $newPhotoPath) {
+                $vehicle->fill([
+                    'plate' => $this->plate,
+                    'brand' => $this->vehicleBrand,
+                    'model' => $this->vehicleModel,
+                    'version' => $this->vehicleVersion,
+                    'color' => $this->vehicleColor,
+                    'ownership' => $this->vehicleOwnership,
+                    'active' => $this->active,
+                    'description' => implode(' · ', [$this->vehicleBrand, $this->vehicleModel, $this->vehicleVersion, $this->vehicleColor]),
+                    'photo_path' => $newPhotoPath ?: $vehicle->photo_path,
+                ])->save();
+            });
+        } catch (Throwable $exception) {
+            if ($newPhotoPath && ! Storage::disk('local')->delete($newPhotoPath)) {
+                throw new \RuntimeException('No se pudo limpiar la fotografía después de fallar el registro del vehículo.', previous: $exception);
+            }
+
+            throw $exception;
+        }
+        if ($newPhotoPath && $previousPhotoPath && ! Storage::disk('local')->delete($previousPhotoPath)) {
+            throw new \RuntimeException('El vehículo se guardó, pero no se pudo eliminar su fotografía anterior.');
+        }
         $this->resetForm();
+        $this->showVehicleModal = false;
         $this->notify('Vehículo guardado.');
+    }
+
+    public function createRfid(): void
+    {
+        Gate::authorize('rfid.manage');
+        $this->resetForm();
+        $this->showRfidModal = true;
+    }
+
+    public function closeRfidModal(): void
+    {
+        $this->showRfidModal = false;
+        $this->resetForm();
+    }
+
+    public function saveRfid(): void
+    {
+        Gate::authorize('rfid.manage');
+        $this->validate([
+            'number' => ['required', 'regex:/^[0-9]{1,32}$/', Rule::unique('rfid_tags', 'number')],
+        ]);
+        RfidTag::create(['number' => $this->number]);
+        $this->closeRfidModal();
+        $this->notify('RFID registrado.');
+    }
+
+    public function createAssignment(): void
+    {
+        Gate::authorize('rfid.manage');
+        $this->resetForm();
+        $this->showAssignmentModal = true;
+    }
+
+    public function closeAssignmentModal(): void
+    {
+        $this->showAssignmentModal = false;
+        $this->resetForm();
     }
 
     public function assign(RfidService $service): void
     {
         Gate::authorize('rfid.manage');
         $this->validate([
-            'number' => ['required', 'regex:/^[0-9]{1,32}$/'],
+            'number' => ['required', 'regex:/^[0-9]{1,32}$/', Rule::exists('rfid_tags', 'number')],
             'personId' => 'required|integer|exists:people,id',
             'vehicleId' => 'nullable|integer|exists:vehicles,id',
             'deviceIds' => 'array',
             'deviceIds.*' => 'integer|distinct|exists:devices,id',
         ]);
         $service->assign($this->number, (int) $this->personId, $this->vehicleId ? (int) $this->vehicleId : null, $this->deviceIds, auth()->user());
-        $this->resetForm();
+        $this->closeAssignmentModal();
         $this->notify('RFID asignado localmente. Verifique la confirmación de cada dispositivo.');
     }
 
@@ -577,10 +705,12 @@ class Workspace extends Component
     {
         Gate::authorize(self::SECTIONS[$this->section][1]);
         $rows = match ($this->section) {
-            'people' => Person::with('group')->where(fn ($q) => $q->where('name', 'like', '%'.$this->search.'%')->orWhere('employee_number', 'like', '%'.$this->search.'%'))->orderBy('name')->paginate(20),
-            'vehicles' => Vehicle::where('plate', 'like', '%'.$this->search.'%')->orderBy('plate')->paginate(20),
+            'people', 'inactive-people' => Person::with('group')->where('active', $this->section === 'people')->where(fn ($q) => $q->where('name', 'like', '%'.$this->search.'%')->orWhere('employee_number', 'like', '%'.$this->search.'%'))->orderBy('name')->paginate(20),
+            'vehicles', 'inactive-vehicles' => Vehicle::where('active', $this->section === 'vehicles')->where('plate', 'like', '%'.$this->search.'%')->orderBy('plate')->paginate(20),
             'devices' => Device::orderBy('name')->paginate(20),
+            'groups' => Group::with('parent')->withCount('people')->where('name', 'like', '%'.$this->search.'%')->orderBy('name')->orderBy('id')->paginate(20),
             'rfid' => RfidAssignment::with(['person', 'vehicle', 'tag'])->latest('id')->paginate(20),
+            'rfid-tags' => RfidTag::where('number', 'like', '%'.$this->search.'%')->latest('id')->paginate(20),
             'users' => User::with('roles')->orderBy('name')->paginate(20),
             'audit' => Activity::with('causer')->latest('id')->paginate(30),
             'movements', 'dashboard' => MovementQuery::build($this->appliedFilters)->paginate(25),
@@ -589,6 +719,7 @@ class Workspace extends Component
 
         return view('livewire.workspace', [
             'rows' => $rows,
+            'rfidTags' => $this->section === 'rfid' ? RfidTag::orderBy('number')->get() : collect(),
             'interfaceHTokenActive' => $this->section === 'interfaceh'
                 && DB::table('interfaceh_api_tokens')->where('id', 1)->where('active', true)->exists(),
             'people' => in_array($this->section, ['rfid', 'movements', 'dashboard']) ? Person::orderBy('name')->get() : collect(),

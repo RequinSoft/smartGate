@@ -179,6 +179,25 @@ class InterfaceHApiTest extends TestCase
         $this->assertSame(0, Person::where('active', true)->count());
     }
 
+    public function test_people_in_a_subgroup_are_deactivated_when_the_baja_hierarchy_arrives_late(): void
+    {
+        $send = fn (string $resource, array $data) => $this->withToken('test-interfaceh-token')
+            ->postJson('/api/'.$resource, ['source' => 'attendance', 'data' => $data])->assertOk();
+
+        $send('personnel', [[
+            'id' => 9,
+            'personCode' => '009',
+            'complete_name' => 'Baja en subgrupo',
+            'group_id' => 33,
+        ]]);
+        $this->assertTrue(Person::where('employee_number', '009')->value('active'));
+
+        $send('groups', [['id' => 32, 'name' => 'BAJAS']]);
+        $send('groups', [['id' => 33, 'name' => 'Personal', 'parent_id' => 32]]);
+
+        $this->assertFalse(Person::where('employee_number', '009')->value('active'));
+    }
+
     public function test_groups_require_a_name(): void
     {
         $this->withToken('test-interfaceh-token')

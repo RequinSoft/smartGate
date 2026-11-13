@@ -17,9 +17,9 @@ class ApplyGroupStatus
     {
         $group = $person->group_id ? Group::find($person->group_id) : null;
 
-        if ($group?->isBaja()) {
+        if ($this->isInBajaGroup($group)) {
             $this->deactivate($person);
-        } elseif ($previousGroup?->isBaja() && ! $person->active) {
+        } elseif ($this->isInBajaGroup($previousGroup) && ! $person->active) {
             $person->active = true;
             $person->save();
         }
@@ -27,11 +27,34 @@ class ApplyGroupStatus
 
     public function applyToGroup(Group $group): void
     {
-        if (! $group->isBaja()) {
+        if (! $this->isInBajaGroup($group)) {
             return;
         }
 
-        $group->people()->where('active', true)->each(fn (Person $person) => $this->deactivate($person));
+        $groupIds = [$group->id];
+        $frontier = [$group->id];
+        while ($frontier !== []) {
+            $children = Group::whereIn('parent_id', $frontier)->pluck('id')->all();
+            $frontier = array_values(array_diff($children, $groupIds));
+            $groupIds = array_merge($groupIds, $frontier);
+        }
+
+        Person::whereIn('group_id', $groupIds)->where('active', true)
+            ->each(fn (Person $person) => $this->deactivate($person));
+    }
+
+    private function isInBajaGroup(?Group $group): bool
+    {
+        $seen = [];
+        while ($group && ! isset($seen[$group->id])) {
+            if ($group->isBaja()) {
+                return true;
+            }
+            $seen[$group->id] = true;
+            $group = $group->parent;
+        }
+
+        return false;
     }
 
     private function deactivate(Person $person): void

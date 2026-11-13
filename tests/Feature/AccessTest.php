@@ -5,8 +5,11 @@ namespace Tests\Feature;
 use App\Livewire\Workspace;
 use App\Models\Person;
 use App\Models\User;
+use App\Models\Vehicle;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
@@ -80,7 +83,8 @@ class AccessTest extends TestCase
             ->set('name', 'María Pérez')->set('number', '00123')->set('department', 'Operaciones')
             ->call('savePerson')->assertHasNoErrors();
         Livewire::actingAs($admin)->test(Workspace::class, ['section' => 'vehicles'])
-            ->set('plate', 'abc-123')->set('description', 'Camioneta')->call('saveVehicle')->assertHasNoErrors();
+            ->set('plate', 'abc-123')->set('vehicleBrand', 'Toyota')->set('vehicleModel', 'Hilux')
+            ->set('vehicleVersion', 'SR')->set('vehicleColor', 'Blanco')->set('vehicleOwnership', 'company')->call('saveVehicle')->assertHasNoErrors();
         Livewire::actingAs($admin)->test(Workspace::class, ['section' => 'devices'])
             ->set('name', 'Acceso norte')->set('model', 'DS-K1T341CMFW')->set('baseUrl', 'https://192.0.2.10')
             ->set('username', 'device-user')->set('password', 'device-super-secret')->set('location', 'Norte')
@@ -112,5 +116,36 @@ class AccessTest extends TestCase
             ->set('name', 'Ana Ruiz Gómez')->call('savePerson')->assertSet('showPersonModal', false);
         $this->assertSame('Ana Ruiz Gómez', $person->fresh()->name);
         $component->call('createPerson')->call('closePersonModal')->assertSet('showPersonModal', false)->assertSet('name', '');
+    }
+
+    public function test_vehicle_modal_create_and_edit_flow(): void
+    {
+        Storage::fake('local');
+        $admin = User::factory()->create()->assignRole('Administrador');
+        $component = Livewire::actingAs($admin)->test(Workspace::class, ['section' => 'vehicles'])
+            ->assertDontSee('vehicle-modal-title')
+            ->call('createVehicle')->assertSet('showVehicleModal', true)->assertSee('Añadir vehículo')
+            ->call('saveVehicle')->assertHasErrors(['plate', 'vehicleBrand', 'vehicleModel', 'vehicleVersion', 'vehicleColor', 'vehicleOwnership'])->assertSet('showVehicleModal', true)
+            ->set('plate', 'abc-123')->set('vehicleBrand', 'Toyota')->set('vehicleModel', 'Hilux')
+            ->set('vehicleVersion', 'SR')->set('vehicleColor', 'Blanco')->set('vehicleOwnership', 'personal')->call('saveVehicle')
+            ->assertHasNoErrors()->assertSet('showVehicleModal', false)->assertSee('default-vehicle.svg');
+        $vehicle = Vehicle::where('plate', 'ABC-123')->firstOrFail();
+        $this->assertNull($vehicle->photo_path);
+        $this->assertSame('Toyota · Hilux · SR · Blanco', $vehicle->description);
+        $this->assertSame('personal', $vehicle->ownership);
+        $component->call('editVehicle', $vehicle->id)->assertSet('showVehicleModal', true)->assertSet('plate', 'ABC-123')->assertSet('vehicleOwnership', 'personal')
+            ->set('vehicleOwnership', 'invalid')->call('saveVehicle')->assertHasErrors(['vehicleOwnership'])
+            ->set('vehicleOwnership', 'company')
+            ->set('vehicleColor', 'Gris')->set('vehiclePhoto', UploadedFile::fake()->image('vehicle.jpg'))
+            ->call('saveVehicle')->assertSet('showVehicleModal', false);
+        $vehicle->refresh();
+        $this->assertSame('Gris', $vehicle->color);
+        $this->assertSame('company', $vehicle->ownership);
+        $this->assertNotNull($vehicle->photo_path);
+        Storage::disk('local')->assertExists($vehicle->photo_path);
+        $component->call('createVehicle')->call('closeVehicleModal')->assertSet('showVehicleModal', false)->assertSet('plate', '');
+        $this->actingAs($admin)->get(route('vehicles.photo', $vehicle))->assertOk()->assertHeader('content-type', 'image/jpeg');
+        $auditor = User::factory()->create()->assignRole('Auditor');
+        $this->actingAs($auditor)->get(route('vehicles.photo', $vehicle))->assertForbidden();
     }
 }
